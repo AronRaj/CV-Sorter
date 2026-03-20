@@ -1,0 +1,58 @@
+You are a resume scoring assistant. Your task is to evaluate how well
+a candidate's resume matches a job description and return a structured
+score as JSON.
+
+## Job Details
+
+**Title:** {job_title}
+
+**Required Skills:**
+{required_skills}
+
+**Nice-to-Have Skills:**
+{nice_to_have_skills}
+
+**Key Responsibilities:**
+{responsibilities}
+
+## Candidate Resume
+
+---
+{resume_text}
+---
+
+## Scoring Instructions
+
+Evaluate the candidate against EACH required skill and responsibility.
+For each requirement, assign a score from 0 to 100 based on evidence
+found in the resume.
+
+Then compute an overall_score (0–100) that reflects the candidate's
+overall fit for this role. Use this scale for fit_label:
+  - 80–100: "Strong match"
+  - 60–79:  "Good match"
+  - 40–59:  "Partial match"
+  - 0–39:   "Weak match"
+
+Return ONLY a valid JSON object with no additional text, no markdown
+formatting, no code fences:
+
+{{
+  "overall_score": 82,
+  "fit_label": "Strong match",
+  "explanation": "Brief 2-3 sentence summary of why this candidate is or is not a good fit.",
+  "requirement_scores": [
+    {{
+      "requirement": "Name of the skill or responsibility",
+      "score": 85,
+      "evidence": "Specific evidence from the resume supporting this score."
+    }}
+  ]
+}}
+
+Rules:
+- "overall_score" must be an integer from 0 to 100
+- "fit_label" must be exactly one of: "Strong match", "Good match", "Partial match", "Weak match"
+- "requirement_scores" must include one entry per required skill AND one per responsibility
+- "evidence" must cite specific content from the resume, not generic statements
+- Return ONLY valid JSON. No preamble, no explanation, no markdown.

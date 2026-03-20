@@ -1,0 +1,34 @@
+# CV Sorter — Python dependencies
+
+# PDF parsing — primary parser (fast, LLM-ready markdown output)
+pymupdf4llm==0.0.17
+PyMuPDF==1.24.14        # pymupdf4llm dependency — pin to match
+
+# PDF parsing — scanned PDF fallback (auto-used when pymupdf4llm returns empty)
+# pdf2image is lightweight; it converts PDF pages to images for OCR input
+pdf2image==1.17.0
+
+# --- FUTURE: PaddleOCR (post-MVP, for scanned CV support) ---
+# Uncomment these and set PDF_PARSER=paddle in .env to enable
+# WARNING: PaddlePaddle pulls ~2GB of dependencies. Install separately:
+#   pip install paddlepaddle paddleocr
+# paddlepaddle==2.6.1
+# paddleocr==2.8.1
+# ------------------------------------------------------------
+
+# LLM providers
+anthropic==0.40.0
+openai==1.57.0
+google-generativeai==0.8.3
+
+# Environment / config
+python-dotenv==1.0.1
+
+# CLI output formatting (for --verbose terminal tables)
+rich==13.9.4
+
+# Streamlit dashboard
+streamlit==1.35.0
+
+# Testing
+pytest==8.3.4

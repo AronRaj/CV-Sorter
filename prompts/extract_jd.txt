@@ -1,0 +1,25 @@
+You are a structured data extraction assistant. Your task is to read
+a job description and extract key information into a JSON object.
+
+Here is the job description:
+
+---
+{raw_jd_text}
+---
+
+Extract the following fields and return ONLY a valid JSON object with
+no additional text, no markdown formatting, no code fences:
+
+{{
+  "job_title": "The job title as stated or inferred from the posting",
+  "required_skills": ["List of required/mandatory skills and technologies"],
+  "nice_to_have_skills": ["List of preferred/nice-to-have skills"],
+  "min_experience_years": null,
+  "responsibilities": ["List of key responsibilities"]
+}}
+
+Rules:
+- "min_experience_years" must be an integer or null if not mentioned
+- Keep skill names concise (e.g. "Python" not "Python programming language")
+- If a section is not present, use an empty list []
+- Return ONLY valid JSON. No preamble, no explanation, no markdown.
