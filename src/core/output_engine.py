@@ -12,7 +12,7 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
-from src.models import CandidateScore, JobDescription
+from src.core.models import CandidateScore, JobDescription
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +42,8 @@ class OutputWriter:
         Args:
             ranked: CandidateScore list sorted by overall_score descending.
             jd: The JobDescription used for scoring.
-            provider: LLM provider name (e.g. "groq", "claude").
-            model: Model string used (e.g. "llama-3.3-70b-versatile").
+            provider: LLM provider name (e.g. "multi-agent").
+            model: Model string used (e.g. "claude-sonnet-4-5").
             output_path: File path for the output JSON.
         """
         output_data = {

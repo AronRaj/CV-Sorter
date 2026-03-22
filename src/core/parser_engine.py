@@ -11,7 +11,7 @@ import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from src.models import Resume
+from src.core.models import Resume
 
 logger = logging.getLogger(__name__)
 

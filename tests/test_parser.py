@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from src.models import Resume
-from src.parser import PaddleOCRParser, PyMuPDFParser, ResumeParser
+from src.core.models import Resume
+from src.core.parser_engine import PaddleOCRParser, PyMuPDFParser, ResumeParser
 
 SAMPLE_PDF = "tests/sample_resumes/sample_cv.pdf"
 

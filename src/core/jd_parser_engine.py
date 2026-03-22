@@ -12,24 +12,26 @@ import logging
 import re
 from pathlib import Path
 
-from src.llm_client import LLMClient
-from src.models import JobDescription
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import HumanMessage
+
+from src.core.models import JobDescription
 
 logger = logging.getLogger(__name__)
 
-PROMPT_TEMPLATE_PATH = Path("prompts/extract_jd.txt")
+PROMPT_TEMPLATE_PATH = Path("src/prompts/extract_jd.txt")
 
 
 class JDParser:
     """Extracts structured job description data from a text file via LLM."""
 
-    def __init__(self, client: LLMClient) -> None:
-        """Initialise with an LLM client.
+    def __init__(self, model: BaseChatModel) -> None:
+        """Initialise with a LangChain chat model.
 
         Args:
-            client: Any concrete LLMClient implementation.
+            model: Any BaseChatModel implementation (Claude, OpenAI, Gemini, etc.).
         """
-        self._client = client
+        self._model = model
 
     def parse(self, jd_path: str) -> JobDescription:
         """Parse a job description text file into a JobDescription dataclass.
@@ -52,7 +54,7 @@ class JDParser:
         prompt = template.format(raw_jd_text=raw_text)
 
         logger.info("Sending job description to LLM for extraction...")
-        response = self._client.complete(prompt)
+        response = self._model.invoke([HumanMessage(content=prompt)]).content
         cleaned = self._strip_code_fences(response)
 
         try:

@@ -1,21 +1,34 @@
-Senior Backend Engineer
+Senior Android Developer
 
-We are looking for a Senior Backend Engineer to join our platform team.
+We are looking for a Senior Android Developer with 10+ years of experience to join our mobile engineering team. This is a senior leadership role requiring deep expertise in the Android ecosystem, a proven track record of shipping large-scale applications, and the ability to drive architectural decisions across the mobile platform.
 
 Requirements:
-- 5+ years of Python experience
-- Strong knowledge of REST API design
-- PostgreSQL and database optimisation experience
-- Familiarity with Docker and container orchestration
-- Experience with cloud platforms (AWS preferred)
+- 10+ years of professional experience in Android application development using Kotlin and Java
+- Deep expertise in modern architectural patterns (MVVM, MVI, Clean Architecture) with hands-on experience designing and scaling complex, multi-module Android codebases
+- Extensive experience with Jetpack libraries (Compose, Navigation, Room, WorkManager, DataStore, Hilt/Dagger) and the Android SDK lifecycle
+- Strong background in building and consuming RESTful APIs, GraphQL endpoints, and real-time data systems (WebSockets, Firebase Realtime Database)
+- Proven ability to lead performance optimization efforts — profiling memory, CPU, battery, and rendering with tools like Android Profiler, Systrace, and LeakCanary
+- Experience architecting and enforcing comprehensive testing strategies (unit, integration, UI, snapshot) using JUnit, Espresso, Mockito, and Robolectric
+- Track record of leading code reviews, defining coding standards, and mentoring teams of 5+ engineers
+- Strong understanding of the full mobile release lifecycle — feature flagging, staged rollouts, A/B testing, crash monitoring, and Play Console analytics
 
 Nice to have:
-- Kubernetes experience
-- Experience with message queues (Kafka, RabbitMQ)
-- Open source contributions
+- Experience with Kotlin Multiplatform (KMP) or Compose Multiplatform for shared business logic across iOS and Android
+- Hands-on CI/CD pipeline ownership using GitHub Actions, Bitrise, or Fastlane with automated signing, testing, and deployment
+- Published apps on Google Play Store with 1M+ downloads or significant user base
+- Contributions to open source Android libraries or active involvement in the Android developer community (conference talks, blog posts, GDG leadership)
+- Experience with gRPC, Protocol Buffers, or custom Gradle plugins for build optimization
+- Familiarity with accessibility standards (WCAG) and internationalization (i18n/l10n) for global app releases
+- Knowledge of security best practices — certificate pinning, encrypted storage, ProGuard/R8 obfuscation, and secure authentication flows (OAuth2, biometrics)
 
 Responsibilities:
-- Design and build scalable microservices
-- Improve system reliability and performance
-- Mentor junior engineers
-- Collaborate with product and frontend teams
+- Lead the design, development, and long-term maintenance of Android applications used by millions of users
+- Define and own the mobile architecture strategy — modularization, dependency injection, build system optimization, and tech debt management
+- Drive the migration from legacy View-based UI to Jetpack Compose across the app
+- Establish and maintain CI/CD pipelines for automated builds, testing, code quality gates, and staged Play Store deployments
+- Collaborate closely with product managers, designers, backend engineers, and QA to deliver features end-to-end with high quality
+- Lead code reviews, enforce architectural standards, and champion engineering best practices across the mobile organization
+- Mentor and grow a team of Android developers — conduct 1:1s, define growth paths, and foster a culture of technical excellence
+- Investigate and resolve critical production issues, ANRs, and crash spikes using Firebase Crashlytics, Android Vitals, and custom observability tooling
+- Evaluate and drive adoption of new Android platform capabilities, Jetpack libraries, and third-party tooling to keep the stack modern and competitive
+- Represent the mobile engineering team in cross-functional technical discussions and strategic planning

@@ -1,0 +1,31 @@
+You are an expert technical recruiter writing a briefing for a
+hiring manager.
+
+Job title: {job_title}
+Number of candidates assessed: {candidate_count}
+
+Candidate results:
+{candidates_summary}
+
+---
+
+Write a recruiter briefing covering:
+
+1. RECOMMENDATION
+   Who should be interviewed first and why. Be specific about
+   their strongest qualifications.
+
+2. SKILL GAP ANALYSIS
+   What skills are consistently missing across candidates?
+   Should the JD requirements be adjusted?
+
+3. INTERVIEW QUESTIONS
+   For each candidate who scored >= 60, write 2 tailored interview
+   questions that probe their specific weak areas.
+
+4. RED FLAGS
+   Note any candidates with inconsistencies between their claimed
+   skills and the evidence found in their resumes.
+
+Write in clear professional prose. Be direct and specific.
+Do not repeat the scores table — the hiring manager already has it.

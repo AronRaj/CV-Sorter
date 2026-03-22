@@ -55,4 +55,7 @@ Rules:
 - "fit_label" must be exactly one of: "Strong match", "Good match", "Partial match", "Weak match"
 - "requirement_scores" must include one entry per required skill AND one per responsibility
 - "evidence" must cite specific content from the resume, not generic statements
+- CRITICAL: Inside every JSON string value, do NOT use the double-quote character (").
+  Paraphrase or use single quotes if you need to quote text. Unescaped " breaks JSON.
+- Keep each "evidence" and "explanation" on one line (no raw line breaks inside strings).
 - Return ONLY valid JSON. No preamble, no explanation, no markdown.

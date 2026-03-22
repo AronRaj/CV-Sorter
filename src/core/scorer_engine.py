@@ -13,12 +13,14 @@ import logging
 import re
 from pathlib import Path
 
-from src.llm_client import LLMClient
-from src.models import CandidateScore, JobDescription, RequirementScore, Resume
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import HumanMessage
+
+from src.core.models import CandidateScore, JobDescription, RequirementScore, Resume
 
 logger = logging.getLogger(__name__)
 
-PROMPT_TEMPLATE_PATH = Path("prompts/score_candidate.txt")
+PROMPT_TEMPLATE_PATH = Path("src/prompts/score_candidate.txt")
 
 
 class Scorer:
@@ -29,13 +31,13 @@ class Scorer:
     Implements one automatic retry on JSON parse failure.
     """
 
-    def __init__(self, client: LLMClient) -> None:
-        """Initialise with an LLM client.
+    def __init__(self, model: BaseChatModel) -> None:
+        """Initialise with a LangChain chat model.
 
         Args:
-            client: Any concrete LLMClient implementation.
+            model: Any BaseChatModel implementation (Claude, OpenAI, Gemini, etc.).
         """
-        self._client = client
+        self._model = model
 
     def score(self, resume: Resume, jd: JobDescription) -> CandidateScore:
         """Score a single resume against a job description.
@@ -63,7 +65,7 @@ class Scorer:
         )
 
         logger.info("Scoring '%s'...", resume.filename)
-        raw_response = self._client.complete(prompt)
+        raw_response = self._model.invoke([HumanMessage(content=prompt)]).content
 
         try:
             return self._parse_response(raw=raw_response, resume=resume)
@@ -95,28 +97,44 @@ class Scorer:
         cleaned = self._strip_code_fences(raw)
         data = json.loads(cleaned)
 
-        try:
-            requirement_scores = [
-                RequirementScore(
-                    requirement=item["requirement"],
-                    score=item["score"],
-                    evidence=item["evidence"],
-                )
-                for item in data["requirement_scores"]
-            ]
-
-            return CandidateScore(
-                resume=resume,
-                overall_score=int(data["overall_score"]),
-                fit_label=data["fit_label"],
-                explanation=data["explanation"],
-                requirement_scores=requirement_scores,
-            )
-        except KeyError as e:
+        if "overall_score" not in data:
             raise RuntimeError(
-                f"Missing key {e} in LLM response for '{resume.filename}'. "
+                f"Missing 'overall_score' in LLM response for '{resume.filename}'. "
                 f"Response preview: {raw[:200]}"
-            ) from e
+            )
+
+        score = int(data["overall_score"])
+
+        requirement_scores = [
+            RequirementScore(
+                requirement=item.get("requirement", "Unknown"),
+                score=int(item.get("score", 0)),
+                evidence=item.get("evidence", "No evidence provided"),
+            )
+            for item in data.get("requirement_scores", [])
+        ]
+
+        return CandidateScore(
+            resume=resume,
+            overall_score=score,
+            fit_label=data.get("fit_label", self._derive_fit_label(score)),
+            explanation=data.get(
+                "explanation",
+                data.get("summary", f"Scored {score}/100 for {resume.filename}"),
+            ),
+            requirement_scores=requirement_scores,
+        )
+
+    @staticmethod
+    def _derive_fit_label(score: int) -> str:
+        """Derive fit label from a 0-100 score when the LLM omits it."""
+        if score >= 80:
+            return "Strong match"
+        elif score >= 60:
+            return "Good match"
+        elif score >= 40:
+            return "Partial match"
+        return "Weak match"
 
     def _retry_score(
         self,
@@ -155,7 +173,7 @@ class Scorer:
         )
 
         logger.info("Retry scoring '%s' with stricter prompt...", resume.filename)
-        raw_response = self._client.complete(retry_prompt)
+        raw_response = self._model.invoke([HumanMessage(content=retry_prompt)]).content
 
         try:
             return self._parse_response(raw=raw_response, resume=resume)

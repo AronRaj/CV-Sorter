@@ -1,14 +1,14 @@
 """Unit tests for src/scorer.py.
 
-Uses mock LLM clients that return hardcoded strings — no real API calls.
+Uses mock chat models that return hardcoded strings — no real API calls.
 """
 
 import json
 
 import pytest
 
-from src.models import JobDescription, Resume
-from src.scorer import Scorer
+from src.core.models import JobDescription, Resume
+from src.core.scorer_engine import Scorer
 
 VALID_JSON_RESPONSE = """
 {
@@ -31,14 +31,22 @@ VALID_JSON_RESPONSE = """
 """
 
 
-class MockLLMClient:
-    """Test double for LLMClient. Returns a hardcoded response."""
+class _Msg:
+    """Minimal AIMessage stand-in with a .content attribute."""
+
+    def __init__(self, content: str) -> None:
+        self.content = content
+
+
+class MockChatModel:
+    """Test double for BaseChatModel. Returns a hardcoded response."""
 
     def __init__(self, response: str) -> None:
         self._response = response
 
-    def complete(self, prompt: str) -> str:
-        return self._response
+    def invoke(self, messages: list) -> _Msg:
+        """Return an object with a .content attribute."""
+        return _Msg(self._response)
 
 
 class CountingMockClient:
@@ -47,11 +55,12 @@ class CountingMockClient:
     def __init__(self) -> None:
         self.call_count = 0
 
-    def complete(self, prompt: str) -> str:
+    def invoke(self, messages: list) -> _Msg:
+        """Return invalid JSON first, then valid JSON."""
         self.call_count += 1
         if self.call_count == 1:
-            return "this is not json at all"
-        return VALID_JSON_RESPONSE
+            return _Msg("this is not json at all")
+        return _Msg(VALID_JSON_RESPONSE)
 
 
 def _make_resume() -> Resume:
@@ -78,7 +87,7 @@ def _make_jd() -> JobDescription:
 
 def test_score_returns_candidate_score() -> None:
     """Verify scorer parses valid JSON into a correct CandidateScore."""
-    scorer = Scorer(client=MockLLMClient(VALID_JSON_RESPONSE))
+    scorer = Scorer(model=MockChatModel(VALID_JSON_RESPONSE))
     result = scorer.score(resume=_make_resume(), jd=_make_jd())
 
     assert result.overall_score == 82
@@ -91,7 +100,7 @@ def test_score_returns_candidate_score() -> None:
 def test_parse_response_strips_code_fences() -> None:
     """Verify scorer handles JSON wrapped in markdown code fences."""
     fenced = "```json\n" + VALID_JSON_RESPONSE + "\n```"
-    scorer = Scorer(client=MockLLMClient(fenced))
+    scorer = Scorer(model=MockChatModel(fenced))
     result = scorer.score(resume=_make_resume(), jd=_make_jd())
 
     assert result.overall_score == 82
@@ -100,7 +109,7 @@ def test_parse_response_strips_code_fences() -> None:
 def test_invalid_json_triggers_retry() -> None:
     """Verify scorer retries once when the first response is not valid JSON."""
     client = CountingMockClient()
-    scorer = Scorer(client=client)
+    scorer = Scorer(model=client)
     result = scorer.score(resume=_make_resume(), jd=_make_jd())
 
     assert result.overall_score == 82
@@ -109,7 +118,7 @@ def test_invalid_json_triggers_retry() -> None:
 
 def test_two_invalid_responses_raises_runtime_error() -> None:
     """Verify scorer raises RuntimeError after two consecutive parse failures."""
-    scorer = Scorer(client=MockLLMClient("not json"))
+    scorer = Scorer(model=MockChatModel("not json"))
 
     with pytest.raises(RuntimeError, match="test_candidate.pdf"):
         scorer.score(resume=_make_resume(), jd=_make_jd())
@@ -124,7 +133,7 @@ def test_fit_label_values() -> None:
         data["fit_label"] = label
         response = json.dumps(data)
 
-        scorer = Scorer(client=MockLLMClient(response))
+        scorer = Scorer(model=MockChatModel(response))
         result = scorer.score(resume=_make_resume(), jd=_make_jd())
 
         assert result.fit_label in valid_labels

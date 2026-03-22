@@ -3,7 +3,7 @@
 Pure construction and field-assertion tests — no file I/O, no LLM calls.
 """
 
-from src.models import CandidateScore, JobDescription, RequirementScore, Resume
+from src.core.models import CandidateScore, JobDescription, RequirementScore, Resume
 
 
 def test_resume_defaults() -> None:

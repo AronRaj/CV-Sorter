@@ -1,0 +1,24 @@
+You are reviewing a CV scoring result for quality.
+
+The score given was: {overall_score}/100
+The fit label was: {fit_label}
+
+Per-requirement scores and evidence:
+{requirement_scores_text}
+
+---
+
+Review each requirement score critically:
+- Is the evidence specific (quotes a section or skill from the resume)?
+- Or is it generic ("candidate has Python experience")?
+- Is any high score (>70) given without strong evidence?
+
+Respond with ONLY valid JSON, no preamble, no code fences:
+{{
+  "quality": "GOOD" or "NEEDS_RETRY",
+  "weak_requirements": ["<requirement name>", ...],
+  "reason": "<one sentence explaining the quality judgment>"
+}}
+
+If all evidence is specific and scores are well-justified: quality = "GOOD"
+If any high score lacks specific evidence: quality = "NEEDS_RETRY"
