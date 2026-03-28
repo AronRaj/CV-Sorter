@@ -1,0 +1,71 @@
+=====================================================
+CV Sorter — Execution Instructions
+Project ID: CS[02] — CV Sorting using LLMs
+=====================================================
+
+PREREQUISITES
+-------------
+1. Python 3.10 or higher
+2. Ollama installed and running locally (https://ollama.com)
+3. Anthropic API key (for Claude Sonnet scoring)
+
+SETUP
+-----
+Step 1: Install Python dependencies
+    pip install -r requirements.txt
+
+Step 2: Pull required Ollama models (one-time)
+    ollama pull llama3.1:latest
+    ollama pull gemma2:latest
+
+Step 3: Start Ollama server (if not already running)
+    ollama serve
+
+Step 4: Set your Anthropic API key (choose one option)
+    Option A — Environment variable:
+        export ANTHROPIC_API_KEY="your-key-here"
+
+    Option B — Create a .env file in the project root:
+        ANTHROPIC_API_KEY=your-key-here
+
+    Option C — Command-line parameter:
+        python main.py --api-key "your-key-here"
+
+EXECUTION
+---------
+Basic run (all defaults):
+    python main.py
+
+With custom job description and resumes folder:
+    python main.py --jd path/to/job_description.txt --resumes path/to/resumes/
+
+With verbose terminal output:
+    python main.py --verbose
+
+With minimum score filter:
+    python main.py --min-score 60 --verbose
+
+Export results as CSV:
+    python main.py --export-csv results/output.csv
+
+With API key as parameter:
+    python main.py --api-key "your-key-here" --verbose
+
+Full example with all options:
+    python main.py --api-key "your-key-here" --jd job_description.txt --resumes resumes/ --output results/ranked_output.json --summary results/recruiter_summary.md --verbose --min-score 50 --export-csv results/output.csv
+
+INPUT FILES
+-----------
+- job_description.txt : Plain text file with the job posting
+- resumes/            : Folder containing candidate CVs in PDF format
+
+OUTPUT FILES
+------------
+- results/ranked_output.json   : Ranked list of candidates with scores
+- results/recruiter_summary.md : Recruiter briefing with recommendations
+
+MODELS USED
+-----------
+1. Ollama llama3.1:8b  (local, free) — Fast shortlisting of candidates
+2. Ollama gemma2:9b    (local, free) — Job description extraction
+3. Claude Sonnet (API)              — Deep scoring and report generation

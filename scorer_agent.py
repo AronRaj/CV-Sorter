@@ -1,11 +1,40 @@
 """Scorer agent — deep-scores shortlisted candidates with self-evaluation.
 
-Uses Claude Sonnet (claude-sonnet-4-5) via the Anthropic API.
-Requires ANTHROPIC_API_KEY in .env.
+**Role in the multi-agent pipeline**
 
-Produces detailed per-requirement scores, then reviews its own
-evidence quality and retries once if any high score lacks specific
-evidence.
+`Supervisor` passes only **shortlisted** `Resume` objects plus `JobDescription`.
+This agent produces a `CandidateScore` per resume: overall score, fit label,
+narrative explanation, and per-requirement scores with evidence strings. Results
+are sorted descending by `overall_score` before they reach `ReportAgent` and
+`OutputWriter`.
+
+**Why Claude (API) here**
+
+Scoring is not a binary filter: it requires mapping JD requirements to resume
+claims, citing evidence, and staying coherent across many fields. That matches
+a larger frontier model with long context better than the local shortlist model,
+at acceptable cost because the shortlist already shrank N.
+
+**Retry and fallback strategy (defense in depth)**
+
+1. **JSON parse loop (`MAX_JSON_PARSE_ATTEMPTS`):** Models sometimes emit
+   markdown fences or broken JSON. We re-prompt with a repair instruction
+   including a snippet of the bad output before giving up.
+2. **CoreScorer fallback:** If strict parsing still fails, delegate to
+   `scorer_engine.Scorer` — same model, alternate parsing/scoring path — to
+   avoid losing a candidate entirely.
+3. **Lenient parse:** Last resort: extract whatever JSON is possible or emit a
+   zero-score placeholder so the pipeline completes and humans see a failure
+   mode in the output rather than a crash.
+4. **Self-evaluation (`self_eval.txt`):** After a successful parse, a second
+   pass judges whether high scores are backed by specific evidence. If the
+   verdict is NEEDS_RETRY, we re-run scoring once with stricter instructions
+   appended to the prompt (`MAX_RETRIES`).
+
+**Fail-safe on self-eval**
+
+If self-eval parsing fails, we assume GOOD so a flaky eval step never blocks
+delivery — scoring quality may be imperfect but the run finishes.
 """
 
 from __future__ import annotations
@@ -18,26 +47,37 @@ from pathlib import Path
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage
 
-from src.core.models import CandidateScore, JobDescription, RequirementScore, Resume
-from src.core.scorer_engine import Scorer as CoreScorer
+from models import CandidateScore, JobDescription, RequirementScore, Resume
+from scorer_engine import Scorer as CoreScorer
 
 logger = logging.getLogger(__name__)
 
-PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
+PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 
 
 class ScorerAgent:
-    """Deep-scoring agent with self-evaluation loop.
+    """LLM-backed scorer with JSON repair, engine fallback, and evidence self-check.
 
-    Uses an API model for quality scoring.  After each score, the agent
-    reviews its own evidence via prompts/self_eval.txt and re-scores
-    once if the evidence is weak or generic.
+    Wraps prompt templates under ``prompts/`` and normalizes all model outputs
+    into `CandidateScore`. The public `run` API is batch-oriented; per-resume
+    logic lives in `_score_one`.
     """
 
+    # Single retry after self-eval: balances quality vs latency/API cost.
     MAX_RETRIES: int = 1
+    # Multiple parse attempts before escalating to CoreScorer / lenient parse.
     MAX_JSON_PARSE_ATTEMPTS: int = 3
 
     def __init__(self, model: BaseChatModel) -> None:
+        """Load scoring and self-evaluation templates; store the shared model.
+
+        Args:
+            model: Typically Claude from `get_claude_model(config)`; reused for
+                scoring, JSON repair, self-eval, and `CoreScorer` fallback.
+
+        Side effects:
+            Reads ``score_candidate.txt`` and ``self_eval.txt`` at init.
+        """
         self._model = model
         self._score_template = (PROMPTS_DIR / "score_candidate.txt").read_text()
         self._eval_template = (PROMPTS_DIR / "self_eval.txt").read_text()
@@ -47,14 +87,22 @@ class ScorerAgent:
         resumes: list[Resume],
         jd: JobDescription,
     ) -> list[CandidateScore]:
-        """Score each resume with self-evaluation, return results sorted by score DESC.
+        """Score each shortlisted resume and return results sorted by overall score.
+
+        Sorting here means `ReportAgent` and JSON consumers get a canonical
+        ranking without re-sorting; relative order within ties is stable enough
+        for recruiter review.
 
         Args:
-            resumes: Shortlisted Resume objects to deep-score.
-            jd:      The structured JobDescription.
+            resumes: Shortlisted resumes (may be full set if supervisor fell back).
+            jd: Full structured job description for requirement-level scoring.
 
         Returns:
-            List of CandidateScore sorted by overall_score descending.
+            List of `CandidateScore`, sorted by ``overall_score`` descending.
+
+        Side effects:
+            Multiple LLM calls per resume (score + optional repairs + self-eval
+            + optional strict re-score). Logs per-file outcomes.
         """
         jd_dict = self._jd_to_dict(jd)
         results: list[CandidateScore] = []
@@ -72,7 +120,28 @@ class ScorerAgent:
         jd: JobDescription,
         jd_dict: dict,
     ) -> CandidateScore:
-        """Score a single resume, self-evaluate, and retry if needed."""
+        """Produce one `CandidateScore` with parse retries and self-eval loop.
+
+        `jd_dict` is precomputed in `run()` for potential future use (e.g.
+        logging or passing to tools); scoring prompts currently rebuild from `jd`.
+
+        Args:
+            resume: The resume being scored.
+            jd: Job description (full prompt content).
+            jd_dict: Serializable view of `jd` (currently unused inside this
+                method but kept for API symmetry / extension).
+
+        Returns:
+            Final `CandidateScore` after any JSON repair, fallback, or strict
+            re-score triggered by self-eval.
+
+        Raises:
+            RuntimeError: Only if no candidate object could be produced at all
+                (should be unreachable if lenient parse always returns).
+
+        Side effects:
+            Logging for parse attempts, fallbacks, and self-eval retries.
+        """
         raw = self._call_score(resume=resume, jd=jd)
         candidate: CandidateScore | None = None
         for attempt in range(self.MAX_JSON_PARSE_ATTEMPTS):
@@ -88,6 +157,8 @@ class ScorerAgent:
                         exc,
                     )
                     try:
+                        # Same model, different orchestration — sometimes yields
+                        # valid structure when prompt/response shape diverged.
                         candidate = CoreScorer(model=self._model).score(
                             resume=resume,
                             jd=jd,
@@ -150,7 +221,23 @@ class ScorerAgent:
         jd: JobDescription,
         stricter: bool = False,
     ) -> str:
-        """Fill the scoring prompt and invoke the model."""
+        """Format the scoring prompt and return the model's raw string output.
+
+        When ``stricter`` is True, append hard requirements that evidence must
+        quote concrete resume content — used after self-eval flags generic
+        justifications for high scores.
+
+        Args:
+            resume: Resume whose `raw_text` is embedded in the prompt.
+            jd: Supplies title, skills, responsibilities lists for the rubric.
+            stricter: If True, append additional anti-generic-evidence rules.
+
+        Returns:
+            Unparsed model content (expected to be JSON, possibly fenced).
+
+        Side effects:
+            One `invoke` on `self._model`.
+        """
         prompt = self._score_template.format(
             job_title=jd.job_title,
             required_skills="\n".join(f"- {s}" for s in jd.required_skills),
@@ -174,18 +261,22 @@ class ScorerAgent:
         jd: JobDescription,
         failed_response: str,
     ) -> str:
-        """Ask the model again after a JSON parse failure.
+        """Re-ask for valid JSON after a parse failure, showing a truncated error context.
+
+        Including only the first ~400 characters keeps the repair prompt within
+        token limits while still giving the model a hint about delimiter issues.
 
         Args:
-            resume: The resume being scored.
-            jd: Job description.
-            failed_response: The previous model output that did not parse.
+            resume: Resume being scored.
+            jd: Job description (full scoring context is re-sent).
+            failed_response: Prior model output that `json.loads` rejected.
 
         Returns:
-            Raw string response from the model.
+            New raw string from the model.
 
-        Raises:
-            RuntimeError: If the retry response still cannot be parsed.
+        Side effects:
+            One additional LLM call. Parsing and escalation (more attempts,
+            `CoreScorer`, lenient parse) are handled by `_score_one`, not here.
         """
         base_prompt = self._score_template.format(
             job_title=jd.job_title,
@@ -206,14 +297,20 @@ class ScorerAgent:
         return response.content
 
     def _self_evaluate(self, result: CandidateScore) -> str:
-        """Ask the model to review the scoring quality.
+        """Second-pass LLM check: is the evidence concrete enough?
 
         Args:
-            result: The CandidateScore to evaluate.
+            result: Parsed `CandidateScore` including requirement rows.
 
         Returns:
-            "GOOD" or "NEEDS_RETRY".  On any error, returns "GOOD"
-            (fail-safe — self-eval must never block the pipeline).
+            ``"GOOD"`` if evidence passes or evaluation fails (fail-open), or
+            ``"NEEDS_RETRY"`` to trigger one stricter re-score.
+
+        Side effects:
+            One `invoke`; may log weak requirement ids from parsed JSON.
+
+        **Fail-safe:** Any exception returns ``"GOOD"`` so eval bugs never stall
+        the batch — product choice: deliver scores over blocking on meta-judge.
         """
         try:
             req_text = "\n".join(
@@ -245,17 +342,23 @@ class ScorerAgent:
             return "GOOD"
 
     def _parse_score_response(self, raw: str, resume: Resume) -> CandidateScore:
-        """Parse the LLM's JSON response into a CandidateScore dataclass.
+        """Strictly parse scorer JSON into `CandidateScore` or raise.
+
+        Used for the happy path and after strict retries; raises trigger the
+        outer repair/fallback machinery in `_score_one`.
 
         Args:
-            raw:    Raw string response from the model.
-            resume: The Resume being scored.
+            raw: Raw model output.
+            resume: Source resume (stored on the result for traceability).
 
         Returns:
-            A populated CandidateScore.
+            Populated `CandidateScore`.
 
         Raises:
-            RuntimeError: If the response cannot be parsed.
+            RuntimeError: Missing JSON, invalid JSON, or missing `overall_score`.
+
+        Side effects:
+            None.
         """
         cleaned = self._strip_code_fences(raw)
         try:
@@ -295,7 +398,20 @@ class ScorerAgent:
         )
 
     def _strip_code_fences(self, text: str) -> str:
-        """Remove markdown code fences from LLM output."""
+        """Remove optional ``` / ```json wrappers so `json.loads` can run.
+
+        Models frequently wrap JSON in markdown even when asked not to; this
+        normalizes before strict parsing.
+
+        Args:
+            text: Raw LLM string.
+
+        Returns:
+            Stripped text suitable for `json.loads` when valid.
+
+        Side effects:
+            None.
+        """
         stripped = text.strip()
         stripped = re.sub(r"^```(?:json)?\s*\n?", "", stripped)
         stripped = re.sub(r"\n?```\s*$", "", stripped)
@@ -303,7 +419,20 @@ class ScorerAgent:
 
     @staticmethod
     def _derive_fit_label(score: int) -> str:
-        """Derive fit label from a 0-100 score when the LLM omits it."""
+        """Map numeric overall score to a recruiter-facing bucket if LLM omitted it.
+
+        Keeps downstream report templates and JSON consumers stable when the
+        model returns scores but forgets `fit_label`.
+
+        Args:
+            score: Integer 0–100.
+
+        Returns:
+            One of: Strong / Good / Partial / Weak match (by band).
+
+        Side effects:
+            None.
+        """
         if score >= 80:
             return "Strong match"
         elif score >= 60:
@@ -313,10 +442,21 @@ class ScorerAgent:
         return "Weak match"
 
     def _lenient_parse(self, raw: str, resume: Resume) -> CandidateScore:
-        """Best-effort parse when strict parsing and all retries have failed.
+        """Best-effort recovery: never raise; prefer degraded score over crash.
 
-        Extracts whatever fields are present and fills in defaults for the rest.
-        Only raises if there is no parseable JSON at all.
+        If JSON is totally invalid, return a zeroed placeholder with an
+        explanation string so `ReportAgent` still lists the candidate and humans
+        see the parse failure surfaced in text.
+
+        Args:
+            raw: Last known model output (possibly broken).
+            resume: Resume row for the result object.
+
+        Returns:
+            Always a `CandidateScore` (possibly with overall_score 0).
+
+        Side effects:
+            None.
         """
         cleaned = self._strip_code_fences(raw)
         try:
@@ -350,7 +490,17 @@ class ScorerAgent:
         )
 
     def _jd_to_dict(self, jd: JobDescription) -> dict:
-        """Convert a JobDescription to a plain dict for JSON serialisation."""
+        """Serialize `JobDescription` to a plain dict for logging or export hooks.
+
+        Args:
+            jd: Parsed JD.
+
+        Returns:
+            Dict with string/list fields mirroring the dataclass.
+
+        Side effects:
+            None.
+        """
         return {
             "job_title": jd.job_title,
             "required_skills": jd.required_skills,

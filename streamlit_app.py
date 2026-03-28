@@ -91,7 +91,7 @@ with st.sidebar:
     st.header("Load Results")
     json_path = st.text_input(
         label="Results file path",
-        value="src/results/ranked_output.json",
+        value="results/ranked_output.json",
     )
     load_button = st.button("Load")
 
